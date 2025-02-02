@@ -21,7 +21,7 @@ docker network inspect bridge | grep -E "Name|IPv4"
 ```
 
 и заполняем в ./playbook/inventory/prod.yml ими соответствующие значения ansible_host для clickhouse и vector.
-Проверяем корректность заполнения ansible_port (по умоляанию 22/ssh), а такще имя пользователя ssh c правами root и
+Проверяем корректность заполнения ansible_port (по умоляанию 22/ssh), а также имя пользователя ssh c правами root и
 пароль (зашифрован паролем из предыдущего задания):
 
 ``` yml
@@ -152,6 +152,14 @@ sinks:
 
 /usr/bin/pkill vector
 /usr/sbin/daemonize /opt/vector/bin/vector --config /opt/vector/config/vector.yaml
+```
+
+- Handler (запускает скрипт с сценарем запуска vector в качестве самостоятельного процесса):
+
+``` ansible
+    - name: Start vector service
+      become: true
+      command: "/bin/sh /opt/vector/vector.sh"
 ```
 
 Определен TAG "restart_vector", с которым можно отдельно запускать playbook для быстрого перезапуска
