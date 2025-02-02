@@ -1,0 +1,5 @@
+#!/bin/bash
+
+/usr/bin/pkill vector
+/usr/sbin/daemonize /opt/vector/bin/vector --config /opt/vector/config/vector.yaml
+

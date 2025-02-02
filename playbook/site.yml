@@ -1,0 +1,73 @@
+---
+
+- name: Install Clickhouse
+  hosts: clickhouse
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - block:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://github.com/ClickHouse/ClickHouse/releases/download/v{{ clickhouse_version }}-lts/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
+            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
+          with_items: "{{ clickhouse_packages }}"
+      rescue:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://github.com/ClickHouse/ClickHouse/releases/download/v{{ clickhouse_version }}-lts/clickhouse-common-static-\
+                 {{ clickhouse_version }}.x86_64.rpm"
+            dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
+    - name: Install clickhouse packages
+      become: true
+      ansible.builtin.yum:
+        disable_gpg_check: true
+        name:
+          - clickhouse-common-static-{{ clickhouse_version }}.rpm
+          - clickhouse-client-{{ clickhouse_version }}.rpm
+          - clickhouse-server-{{ clickhouse_version }}.rpm
+      notify: Start clickhouse service
+    - name: Flush handlers
+      meta: flush_handlers
+    - name: Create database
+      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc !=82
+      changed_when: create_db.rc == 0
+
+- name: Install Vector
+  hosts: vector
+  handlers:
+    - name: Start vector service
+      become: true
+      command: "/bin/sh /opt/vector/vector.sh"
+  tasks:
+    - name: Get and Unarchive vector distrib
+      become: true
+      ansible.builtin.unarchive:
+        remote_src: yes
+        src: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-{{ vector_platform }}-unknown-linux-gnu.tar.gz"
+        dest: "{{ vector_directory }}"
+    - name: Move vector directory
+      become: true
+      command: "mv {{ vector_directory }}/vector-{{ vector_platform }}-unknown-linux-gnu {{ vector_directory }}/vector"
+      args:
+        creates: "{{ vector_directory }}/vector"
+    - name: Get vector start script
+      template:
+        src=./roles/vector/templates/vector-sh.yaml
+        dest="{{ vector_directory }}/vector/vector.sh"
+    - name: Get vector config
+      vars:
+        clickhouse_ip: "{{ vector_clickhouse_ip }}"
+      template:
+        src=./roles/vector/templates/vector.yaml
+        dest="{{ vector_directory }}/vector/config/vector.yaml"
+      notify: Start vector service
+      tags:
+        - restart_vector
+    - name: Flush handlers
+      meta: flush_handlers
